@@ -1,13 +1,16 @@
-from flask import Flask, jsonify, request
+from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required
 
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///products.db' 
+app.config['JWT_SECRET_KEY'] = "6941f7b18bd546108d25e6c724ff8e1f"
+app.config['JWT_TOKEN_LOCATION'] = ['headers']
 app.app_context().push()
 
-
 db = SQLAlchemy(app)
+jwt = JWTManager(app)
 
 class Product(db.Model):
     # database schema
@@ -27,6 +30,29 @@ class Product(db.Model):
     
 # db.create_all()  # to create schema
 
+# to create secrete key I followed following steps:
+
+# import uuid
+# uuid.uuid4().hex
+
+users = {
+    "username": "admin",
+    "password": "admin123"
+}
+
+@app.route('/login', methods=['POST'])
+def login():
+    username = request.json.get("username", None)
+    password = request.json.get("password", None)
+    print(password)
+    if username != users['username'] or password != users['password']:
+        return jsonify({"msg": "Bad username or password"}), 401
+    
+    # Create and return JWT token (login successful)
+    access_token = create_access_token(identity=username)
+    return jsonify(access_token=access_token)
+
+# public request
 @app.route('/products', methods=['GET'])
 def get_products():
     limit = request.args.get('limit', 10)
@@ -34,7 +60,9 @@ def get_products():
     products = Product.query.limit(limit).offset(offset).all()  # limit and offset added for pagination
     return jsonify({'data': [product.serialize() for product in products], 'message': 'Product Fetched Successfully'}), 200
 
+# jwt auth request
 @app.route('/add-products', methods=['POST'])
+@jwt_required()
 def create_product():
     data = request.get_json()
     if not data:  # validation if data is empty dict
